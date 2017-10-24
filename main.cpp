@@ -6,7 +6,10 @@
 #include <unistd.h>
 #include <vector>
 
+#ifndef SSE_BENCH_ONLY
 #include "SDL/SDL.h"
+#endif
+
 #include "main.h"
 
 bool comparator(const point &a, const point &b) {
@@ -49,9 +52,10 @@ void hsv2rgb(float h, float s, float v, float &r, float &g, float &b) {
     b *= 255;
 }
 
+#ifndef SSE_BENCH_ONLY
 void updateTitle(int fps) {
     std::stringstream ss;
-    ss << "ECOAR Gouraud Shading (Michal Leszczynski) (FPS: " << fps << ")";
+    ss << "Gouraud Shading (FPS: " << fps << ")";
     SDL_WM_SetCaption(ss.str().c_str(), ss.str().c_str());
 }
 
@@ -67,9 +71,11 @@ inline T delta(const T &current_val, const T &target_val,
     return std::max(std::min(target_val - current_val, max_amplitude),
                     -max_amplitude);
 }
+#endif
 
 int main(int argc, char *argv[]) {
-    std::cout << "ECOAR Gouraud Shading (Michal Leszczynski)" << std::endl
+#ifndef SSE_BENCH_ONLY
+    std::cout << "Gouraud Shading" << std::endl
               << std::endl;
 
     if (argc < 8) {
@@ -93,6 +99,18 @@ int main(int argc, char *argv[]) {
     int img_width = atoi(argv[3]);
     int img_height = atoi(argv[4]);
     bool benchmark_mode = false;
+#else
+    if (argc < 4) {
+        std::cerr
+            << "Usage: ./tria <seed> <width> <height>"
+            << std::endl;
+        return 1;
+    }
+    unsigned int seed = atoi(argv[1]);
+    int img_width = atoi(argv[2]);
+    int img_height = atoi(argv[3]);
+    bool benchmark_mode = true;
+#endif
 
     if (!seed) {
         seed = (getpid() << 16) | (time(NULL) & 0x0000FFFF);
@@ -107,6 +125,7 @@ int main(int argc, char *argv[]) {
 
     auto fillTriangleImpl = fillTriangleSSE;
 
+#ifndef SSE_BENCH_ONLY
     if (strcmp(argv[1], "cpp") == 0) {
         std::cout << "Using C++ implementation." << std::endl;
         fillTriangleImpl = fillTriangle;
@@ -119,6 +138,7 @@ int main(int argc, char *argv[]) {
         std::cerr << "Unknown mode argument provided." << std::endl;
         return 1;
     }
+#endif
 
     srand(seed);
 
@@ -139,8 +159,10 @@ int main(int argc, char *argv[]) {
                        2);
 
         if (area >= img_width * img_height * 0.05) {
+#ifndef SSE_BENCH_ONLY
             std::cout << "Generated a triangle with area: " << area
                       << std::endl;
+#endif
             break;
         }
 
@@ -149,9 +171,15 @@ int main(int argc, char *argv[]) {
 
     int channels = 3; // for a RGB image
 
+#ifndef SSE_BENCH_ONLY
     unsigned int v1color = std::stoul(std::string(argv[5]), nullptr, 16);
     unsigned int v2color = std::stoul(std::string(argv[6]), nullptr, 16);
     unsigned int v3color = std::stoul(std::string(argv[7]), nullptr, 16);
+#else
+    unsigned int v1color = 0xFF0000;
+    unsigned int v2color = 0x00FF00;
+    unsigned int v3color = 0x0000FF;
+#endif
 
     vtx[0].red = v1color & 0xFF;
     vtx[0].green = (v1color >> 8) & 0xFF;
@@ -166,16 +194,19 @@ int main(int argc, char *argv[]) {
     vtx[2].blue = (v3color >> 16) & 0xFF;
 
     if (benchmark_mode) {
-        int iterations = 10000;
+        int iterations = 100000;
 
         // pseudo surface
         unsigned char *pixels =
             new unsigned char[img_width * img_height * channels]();
 
+        double start, end;
+
+#ifndef SSE_BENCH_ONLY
         std::cout << std::endl
                   << "Benchmarking C++ implementation (" << iterations
                   << " iterations)..." << std::endl;
-        double start = 0;
+        start = 0;
 
         for (int i = 0; i < iterations+100; i++) {
             if (i == 100) {
@@ -185,13 +216,14 @@ int main(int argc, char *argv[]) {
             fillTriangle(img_width, pixels, vtx[0], vtx[1], vtx[2]);
         }
 
-        double end = omp_get_wtime();
+        end = omp_get_wtime();
         double cpp_us = (end - start) * 1000 * 1000 / iterations;
 
         std::cout << "Took time: " << cpp_us << " us" << std::endl << std::endl;
 
         std::cout << "Benchmarking SSE implementation (" << iterations
                   << " iterations)..." << std::endl;
+#endif
 
         for (int i = 0; i < iterations+100; i++) {
             if (i == 100) {
@@ -204,15 +236,20 @@ int main(int argc, char *argv[]) {
         end = omp_get_wtime();
         double sse_us = (end - start) * 1000 * 1000 / iterations;
 
+#ifndef SSE_BENCH_ONLY
         std::cout << "Took time: " << sse_us << " us" << std::endl;
         std::cout << "The second implementation is " << cpp_us / sse_us
                   << " times faster." << std::endl
                   << std::endl;
+#else
+        std::cout << sse_us << std::endl;
+#endif
 
         delete[] pixels;
         return 0;
     }
 
+#ifndef SSE_BENCH_ONLY
     dvtx = vtx;
 
     std::cout << "Generated vertices:" << std::endl;
@@ -372,6 +409,6 @@ int main(int argc, char *argv[]) {
     }
 
     std::cerr << "SDL_WaitEvent error: " << SDL_GetError() << std::endl;
-
+#endif
     exit(0);
 }
